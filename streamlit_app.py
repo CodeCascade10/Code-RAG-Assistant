@@ -1,6 +1,11 @@
 import streamlit as st
+import requests
 import time
-from app.core.pipeline import handle_query
+
+# ----------------------------------
+# 🔗 BACKEND URL (CHANGE THIS)
+# ----------------------------------
+BACKEND_URL = "https://your-backend-name.onrender.com"
 
 # ----------------------------------
 # Page Config
@@ -28,10 +33,6 @@ st.markdown("""
     margin-bottom: 25px;
 }
 
-.sidebar-section {
-    margin-bottom: 20px;
-}
-
 .token-box {
     background-color: #1f2937;
     padding: 10px;
@@ -54,13 +55,14 @@ with st.sidebar:
 
     st.markdown("### 🤖 Model Info")
     st.markdown("""
-    - Embedding: `MiniLM-L6-v2`
-    - Vector DB: Pinecone
-    - LLM: Llama-3.1-8B (Groq)
+    - Embedding: MiniLM-L6-v2  
+    - Vector DB: Pinecone  
+    - LLM: Llama-3.1-8B (Groq)  
     """)
 
     if st.button("🗑 Clear Chat"):
         st.session_state.messages = []
+        st.session_state.token_count = 0
         st.rerun()
 
 # ----------------------------------
@@ -90,7 +92,7 @@ for message in st.session_state.messages:
 # ----------------------------------
 if prompt := st.chat_input("Ask a programming question..."):
 
-    # Add user message
+    # Save user message
     st.session_state.messages.append({
         "role": "user",
         "content": prompt
@@ -99,31 +101,46 @@ if prompt := st.chat_input("Ask a programming question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Approx token counter (rough estimation)
     st.session_state.token_count += len(prompt.split())
 
+    # Call Backend
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = handle_query(prompt)
 
-        # Streaming animation effect
+            try:
+                response = requests.post(
+                    f"{BACKEND_URL}/ask",
+                    json={"query": prompt},
+                    timeout=60
+                )
+
+                if response.status_code == 200:
+                    answer = response.json()["answer"]
+                else:
+                    answer = "⚠️ Backend returned an error."
+
+            except Exception as e:
+                answer = f"⚠️ Could not connect to backend.\n\n{e}"
+
+        # Streaming Animation
         streamed_text = ""
-        message_placeholder = st.empty()
+        placeholder = st.empty()
 
-        for word in response.split():
+        for word in answer.split():
             streamed_text += word + " "
             time.sleep(0.02)
-            message_placeholder.markdown(streamed_text)
+            placeholder.markdown(streamed_text)
 
+    # Save assistant message
     st.session_state.messages.append({
         "role": "assistant",
-        "content": response
+        "content": answer
     })
 
-    st.session_state.token_count += len(response.split())
+    st.session_state.token_count += len(answer.split())
 
 # ----------------------------------
-# Token Counter Display
+# Token Counter
 # ----------------------------------
 st.markdown("---")
 st.markdown(
