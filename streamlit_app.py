@@ -2,148 +2,177 @@ import streamlit as st
 import requests
 import time
 
-# ----------------------------------
-# 🔗 BACKEND URL (CHANGE THIS)
-# ----------------------------------
-BACKEND_URL = "https://your-backend-name.onrender.com"
+BACKEND_URL = "https://code-rag-backend.onrender.com/ask"
 
-# ----------------------------------
-# Page Config
-# ----------------------------------
 st.set_page_config(
     page_title="Code RAG Assistant",
-    page_icon="💻",
+    page_icon="🚀",
     layout="wide"
 )
 
-# ----------------------------------
-# Custom Styling
-# ----------------------------------
+# ---------- GLOBAL CSS ----------
 st.markdown("""
 <style>
-.main-title {
-    font-size: 38px;
-    font-weight: 700;
-    margin-bottom: 5px;
+
+body {
+    background: linear-gradient(-45deg, #0f172a, #1e293b, #0f172a, #111827);
+    background-size: 400% 400%;
+    animation: gradientBG 12s ease infinite;
+    color: #e2e8f0;
 }
 
-.subtitle {
-    font-size: 16px;
-    color: #9ca3af;
-    margin-bottom: 25px;
+@keyframes gradientBG {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
 }
 
-.token-box {
-    background-color: #1f2937;
-    padding: 10px;
-    border-radius: 8px;
+.chat-user {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    padding: 14px 18px;
+    border-radius: 18px;
+    margin-bottom: 12px;
+    color: white;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.chat-bot {
+    background: rgba(30, 41, 59, 0.85);
+    backdrop-filter: blur(10px);
+    padding: 14px 18px;
+    border-radius: 18px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.metric-box {
+    background: rgba(30, 41, 59, 0.85);
+    backdrop-filter: blur(8px);
+    padding: 18px;
+    border-radius: 14px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.header h1 {
+    font-size: 42px;
+    background: linear-gradient(90deg, #0ea5e9, #6366f1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.small-text {
     font-size: 14px;
+    color: #94a3b8;
 }
+
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------------------------
-# Sidebar
-# ----------------------------------
+# ---------- HEADER ----------
+st.markdown("""
+<div class="header">
+    <h1>🚀 Code RAG Assistant</h1>
+    <p class="small-text">Powered by Pinecone + Groq + FastAPI</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ---------- SIDEBAR ----------
 with st.sidebar:
-    st.markdown("## ⚙️ Settings")
+    st.title("⚙ Settings")
 
-    language = st.selectbox(
-        "Select Language",
-        ["All", "Python", "C++", "Java", "SQL"]
-    )
-
-    st.markdown("### 🤖 Model Info")
-    st.markdown("""
-    - Embedding: MiniLM-L6-v2  
-    - Vector DB: Pinecone  
-    - LLM: Llama-3.1-8B (Groq)  
-    """)
+    temperature = st.slider("Model Temperature", 0.0, 1.0, 0.3, 0.1)
+    top_k = st.slider("Top-K Retrieval", 1, 10, 3)
 
     if st.button("🗑 Clear Chat"):
         st.session_state.messages = []
-        st.session_state.token_count = 0
+        st.session_state.token_usage = 0
         st.rerun()
 
-# ----------------------------------
-# Title
-# ----------------------------------
-st.markdown('<div class="main-title">💻 Code RAG Assistant</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Ask programming-related questions only.</div>', unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("### 📊 System Info")
+    st.write("Backend: 🟢 Online")
+    st.write("Vector DB: Pinecone")
+    st.write("Model: Groq LLM")
 
-# ----------------------------------
-# Session State
-# ----------------------------------
+# ---------- SESSION ----------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "token_count" not in st.session_state:
-    st.session_state.token_count = 0
+if "token_usage" not in st.session_state:
+    st.session_state.token_usage = 0
 
-# ----------------------------------
-# Display Chat History
-# ----------------------------------
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# ---------- METRICS ----------
+col1, col2, col3 = st.columns(3)
 
-# ----------------------------------
-# Chat Input
-# ----------------------------------
-if prompt := st.chat_input("Ask a programming question..."):
+with col1:
+    st.markdown(
+        f'<div class="metric-box"><h4>Messages</h4><h2>{len(st.session_state.messages)//2}</h2></div>',
+        unsafe_allow_html=True
+    )
 
-    # Save user message
-    st.session_state.messages.append({
-        "role": "user",
-        "content": prompt
-    })
+with col2:
+    st.markdown(
+        f'<div class="metric-box"><h4>Estimated Tokens</h4><h2>{st.session_state.token_usage}</h2></div>',
+        unsafe_allow_html=True
+    )
 
-    with st.chat_message("user"):
-        st.markdown(prompt)
+with col3:
+    st.markdown(
+        f'<div class="metric-box"><h4>Status</h4><h2>🟢 Live</h2></div>',
+        unsafe_allow_html=True
+    )
 
-    st.session_state.token_count += len(prompt.split())
+st.divider()
 
-    # Call Backend
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+# ---------- CHAT ----------
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        st.markdown(f'<div class="chat-user">{msg["content"]}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="chat-bot">{msg["content"]}</div>', unsafe_allow_html=True)
 
-            try:
-                response = requests.post(
-                    f"{BACKEND_URL}/ask",
-                    json={"query": prompt},
-                    timeout=60
-                )
+# ---------- INPUT ----------
+if prompt := st.chat_input("Ask your coding question..."):
 
-                if response.status_code == 200:
-                    answer = response.json()["answer"]
-                else:
-                    answer = "⚠️ Backend returned an error."
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-            except Exception as e:
-                answer = f"⚠️ Could not connect to backend.\n\n{e}"
+    start = time.time()
 
-        # Streaming Animation
-        streamed_text = ""
-        placeholder = st.empty()
+    with st.spinner("🧠 Thinking..."):
+        try:
+            response = requests.post(
+                BACKEND_URL,
+                json={"query": prompt},
+                timeout=60
+            )
 
-        for word in answer.split():
-            streamed_text += word + " "
-            time.sleep(0.02)
-            placeholder.markdown(streamed_text)
+            if response.status_code == 200:
+                answer = response.json().get("answer", "No response.")
+            else:
+                answer = f"Error {response.status_code}"
 
-    # Save assistant message
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": answer
-    })
+        except Exception as e:
+            answer = f"Connection error: {e}"
 
-    st.session_state.token_count += len(answer.split())
+    elapsed = round(time.time() - start, 2)
 
-# ----------------------------------
-# Token Counter
-# ----------------------------------
-st.markdown("---")
-st.markdown(
-    f'<div class="token-box">Approx Tokens Used: {st.session_state.token_count}</div>',
-    unsafe_allow_html=True
-)
+    token_estimate = (len(prompt) + len(answer)) // 4
+    st.session_state.token_usage += token_estimate
+
+    final_answer = f"""
+{answer}
+
+---
+⚡ Response Time: {elapsed}s  
+🔢 Tokens (estimated): {token_estimate}
+"""
+
+    st.session_state.messages.append({"role": "assistant", "content": final_answer})
+
+    st.rerun()
