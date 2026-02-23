@@ -1,33 +1,33 @@
-from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
+from pinecone import Pinecone
 
 load_dotenv()
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
 
-# Initialize Pinecone client
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
-
-# Load embedding model once (important)
-model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def retrieve_context(query: str, top_k: int = 5) -> str:
     """
-    Takes user query → converts to embedding →
-    searches Pinecone → returns combined context text.
+    Uses Pinecone hosted MiniLM embedding model (384-dim).
+    Safe for Render free tier.
     """
 
-    # Convert query to embedding
-    query_embedding = model.encode(query).tolist()
+    # Generate embedding via Pinecone inference (384-dim)
+    embedding = pc.inference.embed(
+        model="multilingual-e5-large",
+        inputs=[query],
+        parameters={"input_type":"query"}
+    )
 
-    # Search Pinecone
+    query_vector = embedding.data[0].values
+
     results = index.query(
-        vector=query_embedding,
+        vector=query_vector,
         top_k=top_k,
         include_metadata=True
     )
@@ -35,7 +35,6 @@ def retrieve_context(query: str, top_k: int = 5) -> str:
     if not results.get("matches"):
         return ""
 
-    # Extract text from metadata
     contexts = []
     for match in results["matches"]:
         metadata = match.get("metadata", {})

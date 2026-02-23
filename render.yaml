@@ -3,8 +3,8 @@ services:
     name: code-rag-backend
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: bash -c "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    buildCommand: "pip install -r requirements-backend.txt"
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PINECONE_API_KEY
         sync: false

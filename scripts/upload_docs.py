@@ -2,9 +2,7 @@ import os
 import uuid
 from dotenv import load_dotenv
 from pypdf import PdfReader
-from sentence_transformers import SentenceTransformer
 from pinecone import Pinecone
-from tqdm import tqdm
 
 # Load environment variables
 load_dotenv()
@@ -15,9 +13,6 @@ PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
 # Initialize Pinecone
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = pc.Index(PINECONE_INDEX_NAME)
-
-# Load embedding model
-model = SentenceTransformer("all-MiniLM-L6-v2")
 
 DATA_FOLDER = "data/code_docs"
 
@@ -50,22 +45,29 @@ def chunk_text(text, chunk_size=800):
     return chunks
 
 
-def upload_chunks(chunks, source, batch_size=100):
+def upload_chunks(chunks, source, batch_size=50):
     vectors = []
 
     for chunk in chunks:
-        embedding = model.encode(chunk).tolist()
+        # Generate embedding via Pinecone hosted model (1024-dim)
+        embedding = pc.inference.embed(
+            model="multilingual-e5-large",
+            inputs=[chunk],
+            parameters={"input_type":"passage"}
+        )
+
+        vector = embedding.data[0].values
 
         vectors.append({
             "id": str(uuid.uuid4()),
-            "values": embedding,
+            "values": vector,
             "metadata": {
                 "text": chunk,
                 "source": source
             }
         })
 
-    # Upload in batches
+    # Upload in smaller batches (safer)
     for i in range(0, len(vectors), batch_size):
         batch = vectors[i:i + batch_size]
         index.upsert(vectors=batch)
