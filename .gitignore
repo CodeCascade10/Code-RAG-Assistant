@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .env
 .streamlit/
+render_test/
+frontend_env/
