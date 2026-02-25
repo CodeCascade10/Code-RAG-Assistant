@@ -3,6 +3,7 @@ import requests
 import time
 
 BACKEND_URL = "https://code-rag-backend.onrender.com/ask"
+TOKEN_LIMIT = 5000  # max tokens per session (you can change)
 
 st.set_page_config(
     page_title="Code RAG Assistant",
@@ -10,10 +11,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------- GLOBAL CSS ----------
+# ---------- CSS ----------
 st.markdown("""
 <style>
-
 body {
     background: linear-gradient(-45deg, #0f172a, #1e293b, #0f172a, #111827);
     background-size: 400% 400%;
@@ -33,7 +33,6 @@ body {
     border-radius: 18px;
     margin-bottom: 12px;
     color: white;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 
 .chat-bot {
@@ -42,7 +41,6 @@ body {
     padding: 14px 18px;
     border-radius: 18px;
     margin-bottom: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 
 .metric-box {
@@ -51,54 +49,20 @@ body {
     padding: 18px;
     border-radius: 14px;
     text-align: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-
-.header {
-    text-align: center;
-    margin-bottom: 20px;
 }
 
 .header h1 {
+    text-align: center;
     font-size: 42px;
     background: linear-gradient(90deg, #0ea5e9, #6366f1);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
-
-.small-text {
-    font-size: 14px;
-    color: #94a3b8;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
 # ---------- HEADER ----------
-st.markdown("""
-<div class="header">
-    <h1>🚀 Code RAG Assistant</h1>
-    <p class="small-text">Powered by Pinecone + Groq + FastAPI</p>
-</div>
-""", unsafe_allow_html=True)
-
-# ---------- SIDEBAR ----------
-with st.sidebar:
-    st.title("⚙ Settings")
-
-    temperature = st.slider("Model Temperature", 0.0, 1.0, 0.3, 0.1)
-    top_k = st.slider("Top-K Retrieval", 1, 10, 3)
-
-    if st.button("🗑 Clear Chat"):
-        st.session_state.messages = []
-        st.session_state.token_usage = 0
-        st.rerun()
-
-    st.markdown("---")
-    st.markdown("### 📊 System Info")
-    st.write("Backend: 🟢 Online")
-    st.write("Vector DB: Pinecone")
-    st.write("Model: Groq LLM")
+st.markdown('<div class="header"><h1>🚀 Code RAG Assistant</h1></div>', unsafe_allow_html=True)
 
 # ---------- SESSION ----------
 if "messages" not in st.session_state:
@@ -107,8 +71,33 @@ if "messages" not in st.session_state:
 if "token_usage" not in st.session_state:
     st.session_state.token_usage = 0
 
+# ---------- SIDEBAR ----------
+with st.sidebar:
+    st.title("🌍 Language Mode")
+
+    language = st.selectbox(
+        "Select Programming Language",
+        ["All", "C", "C++", "Java", "Python"]
+    )
+
+    st.markdown("---")
+    st.title("📊 Usage")
+
+    st.progress(min(st.session_state.token_usage / TOKEN_LIMIT, 1.0))
+
+    st.write(f"Used: {st.session_state.token_usage}")
+    st.write(f"Limit: {TOKEN_LIMIT}")
+
+    if st.session_state.token_usage >= TOKEN_LIMIT:
+        st.error("Token limit reached 🚫")
+
+    if st.button("🗑 Clear Chat"):
+        st.session_state.messages = []
+        st.session_state.token_usage = 0
+        st.rerun()
+
 # ---------- METRICS ----------
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
     st.markdown(
@@ -118,19 +107,13 @@ with col1:
 
 with col2:
     st.markdown(
-        f'<div class="metric-box"><h4>Estimated Tokens</h4><h2>{st.session_state.token_usage}</h2></div>',
-        unsafe_allow_html=True
-    )
-
-with col3:
-    st.markdown(
         f'<div class="metric-box"><h4>Status</h4><h2>🟢 Live</h2></div>',
         unsafe_allow_html=True
     )
 
 st.divider()
 
-# ---------- CHAT ----------
+# ---------- CHAT HISTORY ----------
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.markdown(f'<div class="chat-user">{msg["content"]}</div>', unsafe_allow_html=True)
@@ -138,13 +121,20 @@ for msg in st.session_state.messages:
         st.markdown(f'<div class="chat-bot">{msg["content"]}</div>', unsafe_allow_html=True)
 
 # ---------- INPUT ----------
-if prompt := st.chat_input("Ask your coding question..."):
+if st.session_state.token_usage < TOKEN_LIMIT:
+    if prompt := st.chat_input("Ask your coding question..."):
 
-    st.session_state.messages.append({"role": "user", "content": prompt})
+        # Add language context if not "All"
+        if language != "All":
+            prompt = f"This question is specifically about {language}. {prompt}"
 
-    start = time.time()
+        st.session_state.messages.append({"role": "user", "content": prompt})
 
-    with st.spinner("🧠 Thinking..."):
+        start = time.time()
+
+        loader = st.empty()
+        loader.markdown("🧠 AI is thinking...")
+
         try:
             response = requests.post(
                 BACKEND_URL,
@@ -160,19 +150,23 @@ if prompt := st.chat_input("Ask your coding question..."):
         except Exception as e:
             answer = f"Connection error: {e}"
 
-    elapsed = round(time.time() - start, 2)
+        loader.empty()
 
-    token_estimate = (len(prompt) + len(answer)) // 4
-    st.session_state.token_usage += token_estimate
+        elapsed = round(time.time() - start, 2)
 
-    final_answer = f"""
+        token_estimate = (len(prompt) + len(answer)) // 4
+        st.session_state.token_usage += token_estimate
+
+        final_answer = f"""
 {answer}
 
 ---
 ⚡ Response Time: {elapsed}s  
-🔢 Tokens (estimated): {token_estimate}
+🔢 Tokens used: {token_estimate}
 """
 
-    st.session_state.messages.append({"role": "assistant", "content": final_answer})
+        st.session_state.messages.append({"role": "assistant", "content": final_answer})
 
-    st.rerun()
+        st.rerun()
+else:
+    st.warning("🚫 You have reached your session token limit.")
