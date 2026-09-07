@@ -3,11 +3,7 @@ import requests
 import time
 
 import os
-
-BACKEND_URL = st.secrets.get(
-    "BACKEND_URL",
-    "http://localhost:8000/ask"
-)
+BACKEND_URL = "https://code-rag-backend.onrender.com/ask"
 TOKEN_LIMIT = 5000  # max tokens per session (you can change)
 
 st.set_page_config(
